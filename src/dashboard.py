@@ -15,7 +15,7 @@ from nltk.corpus import stopwords
 nltk.download('stopwords')
 
 # Carga de datos
-data = pd.read_excel("data_1.xlsx")
+data = pd.read_excel(r"data/data_1.xlsx")
 
 # Asegurarse de que la columna 'FECHA' sea de tipo datetime
 data['FECHA'] = pd.to_datetime(data['FECHA'])
