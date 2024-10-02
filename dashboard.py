@@ -60,6 +60,8 @@ def generate_wordcloud(text, colormap='coolwarm'):
 # Inicialización de la aplicación Dash con Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
+server = app.server
+
 # Opciones de agrupación (desplegable)
 AGG_OPTIONS = {
     'D': 'Día',
