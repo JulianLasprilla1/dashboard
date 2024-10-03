@@ -1,3 +1,5 @@
+#--------- LIBRERIAS ---------#
+
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output, State
@@ -11,13 +13,12 @@ from io import BytesIO
 import nltk
 from nltk.corpus import stopwords
 
-# Descargar stopwords de NLTK si es necesario
+#----------- GESTIÓN DE LOS DATOS ----------#
+
 nltk.download('stopwords')
 
-# Carga de datos
+# Carga de datos, se encuentran limpios en data_1.xlsx
 data = pd.read_excel(r"data/data_1.xlsx")
-
-# Asegurarse de que la columna 'FECHA' sea de tipo datetime
 data['FECHA'] = pd.to_datetime(data['FECHA'])
 
 # Creación de columnas adicionales
@@ -25,23 +26,23 @@ data['POS_COMENTARIOS'] = data['COMENTARIO_POSITIVO'].notna().astype(int)
 data['NEG_COMENTARIOS'] = data['COMENTARIO_NEGATIVO'].notna().astype(int)
 data['TOTAL_COMENTARIOS'] = data['POS_COMENTARIOS'] + data['NEG_COMENTARIOS']
 
-# Lista de stopwords en español de NLTK
+# stopwords en español
 stopwords_spanish = set(stopwords.words('spanish'))
 
-# Función para generar la nube de palabras eliminando las stopwords en español
+
 def generate_wordcloud(text, colormap='coolwarm'):
     valid_text = text.dropna().astype(str)
     if valid_text.empty:
         return ""  # Devolver cadena vacía si no hay texto
     
-    # Crear la nube de palabras con stopwords en español
+    # nube de palabrqas
     wordcloud = WordCloud(
         width=800, 
         height=400, 
         background_color='white', 
         colormap=colormap,
         max_words=100,
-        stopwords=stopwords_spanish,  # Aplicamos stopwords aquí
+        stopwords=stopwords_spanish,
         contour_width=1, 
         contour_color='steelblue',
         prefer_horizontal=1.0,
@@ -57,7 +58,7 @@ def generate_wordcloud(text, colormap='coolwarm'):
     buffer.seek(0)
     return base64.b64encode(buffer.getvalue()).decode()
 
-# Inicialización de la aplicación Dash con Bootstrap
+#-------Inicialización de la aplicación Dash con Bootstrap-------#
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 server = app.server
@@ -67,7 +68,7 @@ AGG_OPTIONS = {
     'D': 'Día',
     'W': 'Semana',
     'M': 'Mes',
-    'Q': 'Trimestre',  # Trimestre añadido
+    'Q': 'Trimestre',
     'Y': 'Año'
 }
 
@@ -80,7 +81,8 @@ CALIFICACION_OPTIONS = [
     {'label': '5 Estrellas', 'value': 5}
 ]
 
-# Layout de la aplicación
+# ----------------- LAYOUT -----------------#
+
 app.layout = dbc.Container([
     # Header Section (10% de la altura total)
     dbc.Row([
@@ -134,7 +136,7 @@ app.layout = dbc.Container([
                     style={'width': '100%', 'marginBottom': '10px'}
                 )
             ]),
-            # Buscador de palabras clave dinámico con opciones eliminables
+            # Buscador de palabras 
             html.Div([
                 html.Label('Buscar palabras clave:', style={'fontWeight': 'bold', 'marginBottom': '5px', 'font-size': '14px'}),
                 dcc.Input(
@@ -186,7 +188,7 @@ app.layout = dbc.Container([
                                 columns=[],
                                 data=[]
                             )
-                        ], style={'width': '100%', 'height': '100%', 'overflowY': 'auto'})  # Contenedor ajustado para ocupar todo el espacio vertical con scroll
+                        ], style={'width': '100%', 'height': '100%', 'overflowY': 'auto'})  
                     ], style={'height': '100%'})
                 ], className='grid-item', style={'height': '35vh', 'overflow': 'hidden'}),  # Ajuste de altura a 35vh
 
@@ -200,7 +202,7 @@ app.layout = dbc.Container([
                 'gridTemplateColumns': '1fr 1fr',
                 'gridTemplateRows': '1fr 1fr',
                 'gap': '20px',
-                'height': '80vh',  # Altura ajustada para las visualizaciones
+                'height': '80vh',  
                 'padding': '10px'
             })
         ], width=10, style={'padding': '10px', 'height': '80vh'})  # Ancho ajustado a 10 para compensar el ajuste en la barra lateral
@@ -216,11 +218,11 @@ app.layout = dbc.Container([
 ], fluid=True, style={'padding': '0px', 'margin': '0px', 'height': '100vh', 'display': 'flex', 'flex-direction': 'column'})
 
 
-# Callback para agregar palabras clave al Dropdown y actualizar visualizaciones
+# ---------------- CALLBACKS ----------------#
 @app.callback(
     [Output('buscador-palabras', 'options'),
      Output('buscador-palabras', 'value'),
-     Output('input-palabra-clave', 'value'),  # Limpiar el input después de agregar la palabra
+     Output('input-palabra-clave', 'value'), 
      Output('nube-palabras', 'src'),
      Output('grafico-lineas', 'figure'),
      Output('tabla-comentarios', 'data'),
