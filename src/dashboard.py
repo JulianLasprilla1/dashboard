@@ -304,7 +304,6 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
 
     fig_lineas.update_layout(title='Cantidad de Reservas', xaxis_title='Fecha', yaxis_title='Cantidad de Comentarios')
 
-    # Crear el scatter geo para el mapa
     if not mapa_data.empty:
         mapa_fig = px.scatter_geo(mapa_data, locations='PAIS', locationmode='country names', size='POS_COMENTARIOS' if 'positivo' in selected_comments else 'NEG_COMENTARIOS',
                                   projection='natural earth', title='Distribución de Comentarios por País')
