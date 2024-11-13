@@ -19,7 +19,7 @@ from nltk.corpus import stopwords
 nltk.download('stopwords')
 
 # Carga de datos
-data = pd.read_excel(r"../data/data_1.xlsx")
+data = pd.read_excel(r"data_1.xlsx")
 data['FECHA'] = pd.to_datetime(data['FECHA'])
 
 # Creación de columnas adicionales
