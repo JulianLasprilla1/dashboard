@@ -1,5 +1,3 @@
-#--------- LIBRERIAS ---------#
-
 import dash
 import dash_bootstrap_components as dbc
 from dash import dcc, html, Input, Output, State
@@ -13,39 +11,99 @@ import base64
 from io import BytesIO
 import nltk
 from nltk.corpus import stopwords
+import folium
+from folium.plugins import MarkerCluster
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
+import time
+import os
+import pickle
 
 #----------- GESTIÓN DE LOS DATOS ----------#
 
 nltk.download('stopwords')
 
 # Carga de datos
+print("Cargando datos...")
 data = pd.read_excel(r"data_1.xlsx")
 data['FECHA'] = pd.to_datetime(data['FECHA'])
 
+# Asegurarse de que la columna 'CALIFICACION' sea de tipo numérico
+print("Convirtiendo calificación a tipo numérico...")
+data['CALIFICACION'] = pd.to_numeric(data['CALIFICACION'], errors='coerce')
+
 # Creación de columnas adicionales
+print("Creando columnas adicionales de comentarios...")
 data['POS_COMENTARIOS'] = data['COMENTARIO_POSITIVO'].notna().astype(int)
 data['NEG_COMENTARIOS'] = data['COMENTARIO_NEGATIVO'].notna().astype(int)
 data['TOTAL_COMENTARIOS'] = data['POS_COMENTARIOS'] + data['NEG_COMENTARIOS']
 
 # stopwords en español
+print("Descargando stopwords en español...")
 stopwords_spanish = set(stopwords.words('spanish'))
 
+# Asignar latitud y longitud automáticamente desde el dataset con caché
+cache_file = "country_coords_cache.pkl"
+
+def assign_lat_lon(df):
+    print("Asignando latitudes y longitudes...")
+    if os.path.exists(cache_file):
+        print("Cargando datos de caché...")
+        with open(cache_file, 'rb') as f:
+            country_coords = pickle.load(f)
+    else:
+        print("Generando nuevas coordenadas...")
+        country_coords = {}
+        geolocator = Nominatim(user_agent="geoapiExercises")
+        unique_countries = df['PAIS'].dropna().unique()
+        for country in unique_countries:
+            if country not in country_coords:
+                retries = 3
+                while retries > 0:
+                    try:
+                        print(f"Geocodificando país: {country}...")
+                        location = geolocator.geocode(country, timeout=10)
+                        if location:
+                            country_coords[country] = [location.latitude, location.longitude]
+                        else:
+                            country_coords[country] = [0, 0]
+                        break
+                    except GeocoderTimedOut:
+                        print(f"Tiempo de espera agotado para {country}. Reintentando...")
+                        retries -= 1
+                        time.sleep(1)
+                        if retries == 0:
+                            print(f"No se pudo obtener la ubicación para {country}. Asignando [0, 0]...")
+                            country_coords[country] = [0, 0]
+        # Guardar en caché
+        with open(cache_file, 'wb') as f:
+            pickle.dump(country_coords, f)
+    
+    df['LATITUD'] = df['PAIS'].map(lambda x: country_coords.get(x, [0, 0])[0])
+    df['LONGITUD'] = df['PAIS'].map(lambda x: country_coords.get(x, [0, 0])[1])
+    return df
+
+data = assign_lat_lon(data)
+
 # Generar la nube de palabras sin iniciar la GUI de Matplotlib
-def generate_wordcloud(text, colormap='coolwarm'):
+def generate_wordcloud(text, colormap='bwr'):
+    print("Generando nube de palabras...")
     valid_text = text.dropna().astype(str)
     if valid_text.empty:
+        print("Texto vacío para la nube de palabras. Retornando cadena vacía...")
         return ""
     
     wordcloud = WordCloud(
-        width=600,  # Tamaño ajustado
-        height=300, 
-        background_color='white', 
-        colormap=colormap,
+        width=600,
+        height=300,
+        background_color='white',
+        colormap='bwr',
         max_words=100,
         stopwords=stopwords_spanish,
-        contour_width=1, 
-        contour_color='steelblue',
-        scale=1.5  # Ajuste de escala para una mejor calidad
+        contour_width=0.5,
+        contour_color='black',
+        scale=1.5,
+        normalize_plurals=False
     ).generate(' '.join(valid_text))
     
     buffer = BytesIO()
@@ -57,7 +115,28 @@ def generate_wordcloud(text, colormap='coolwarm'):
     buffer.seek(0)
     return base64.b64encode(buffer.getvalue()).decode()
 
+# Generar un mapa de Folium
+def generate_folium_map(data):
+    print("Generando mapa de Folium...")
+    m = folium.Map(location=[4.7110, -74.0721], zoom_start=6)
+    marker_cluster = MarkerCluster().add_to(m)
+    for _, row in data.iterrows():
+        if row['LATITUD'] != 0 and row['LONGITUD'] != 0:
+            print(f"Agregando marcador para {row['PAIS']}...")
+            folium.Marker(
+                location=[row['LATITUD'], row['LONGITUD']],
+                popup=f"{row['PAIS']}: {row['POS_COMENTARIOS']} positivos, {row['NEG_COMENTARIOS']} negativos",
+                icon=folium.Icon(color='blue' if row['POS_COMENTARIOS'] >= row['NEG_COMENTARIOS'] else 'red')
+            ).add_to(marker_cluster)
+    return m
+
+# Convertir el mapa de Folium a HTML
+def folium_to_html(m):
+    print("Convirtiendo mapa de Folium a HTML...")
+    return m._repr_html_()
+
 #-------Inicialización de la aplicación Dash con Bootstrap-------#
+print("Inicializando la aplicación Dash...")
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.config.suppress_callback_exceptions = True
 server = app.server
@@ -72,15 +151,10 @@ AGG_OPTIONS = {
 }
 
 # Lista de opciones de calificación
-CALIFICACION_OPTIONS = [
-    {'label': '1 Estrella', 'value': 1},
-    {'label': '2 Estrellas', 'value': 2},
-    {'label': '3 Estrellas', 'value': 3},
-    {'label': '4 Estrellas', 'value': 4},
-    {'label': '5 Estrellas', 'value': 5}
-]
+CALIFICACION_OPTIONS = [{'label': f'{i}-{i+1}', 'value': f'{i}-{i+1}'} for i in range(1, 10)]
 
 # ----------------- LAYOUT -----------------#
+print("Configurando el layout de la aplicación...")
 app.layout = dbc.Container([
     # Header Section
     dbc.Row([
@@ -193,7 +267,6 @@ app.layout = dbc.Container([
                 dbc.Col([
                     # Nube de Palabras
                     dbc.Card([
-                        html.H4('Nube de Palabras', style={'textAlign': 'center', 'color': '#333', 'font-size': '16px'}),
                         dcc.Loading(
                             children=[
                                 html.Div(
@@ -229,7 +302,8 @@ app.layout = dbc.Container([
                         dbc.Tabs([
                             dbc.Tab(label='Línea de Reservas', tab_id='tab-linea-reservas'),
                             dbc.Tab(label='Gráfico de Barras por Tipo de Habitación', tab_id='tab-barras-hab'),
-                            dbc.Tab(label='Mapa de Comentarios por País', tab_id='tab-mapa-comentarios')
+                            dbc.Tab(label='Gráfico de Barras por Número de Habitación', tab_id='tab-barras-num-hab'),
+                            dbc.Tab(label='Mapa de Comentarios por País', tab_id='tab-mapa-comentarios-folium')
                         ], id='tabs-comentarios', active_tab='tab-linea-reservas'),
                         dcc.Loading(
                             children=html.Div(id='contenido-tab-comentarios', style={'height': '75vh', 'padding': '10px'}),
@@ -254,9 +328,9 @@ app.layout = dbc.Container([
 @app.callback(
     [Output('buscador-palabras', 'options'),
      Output('buscador-palabras', 'value'),
-     Output('input-palabra-clave', 'value'), 
+     Output('input-palabra-clave', 'value'),
      Output('nube-palabras', 'src'),
-     Output('contenido-tab-comentarios', 'children'), 
+     Output('contenido-tab-comentarios', 'children'),
      Output('tabla-comentarios', 'data'),
      Output('tabla-comentarios', 'columns')],
     [Input('input-palabra-clave', 'value'),
@@ -279,14 +353,21 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
             opciones_palabras.append({'label': palabra_clave, 'value': palabra_clave})
 
     filtered_data = data[(data['FECHA'] >= start_date) & (data['FECHA'] <= end_date)]
+    
     if calificacion_value:
-        filtered_data = filtered_data[filtered_data['CALIFICACION'].isin(calificacion_value)]
+        for calificacion_interval in calificacion_value:
+            lower, upper = map(int, calificacion_interval.split('-'))
+            filtered_data = filtered_data[(filtered_data['CALIFICACION'] >= lower) & (filtered_data['CALIFICACION'] < upper)]
+            
     if paises_seleccionados:
         filtered_data = filtered_data[filtered_data['PAIS'].isin(paises_seleccionados)]
+    
     if tipos_hab_seleccionados:
         filtered_data = filtered_data[filtered_data['TIPO_HAB'].isin(tipos_hab_seleccionados)]
+        
     if num_hab_seleccionado:
         filtered_data = filtered_data[filtered_data['No_HAB'].isin(num_hab_seleccionado)]
+        
     if palabras_clave_seleccionadas:
         for palabra in palabras_clave_seleccionadas:
             pos_filtro = filtered_data['COMENTARIO_POSITIVO'].str.contains(rf'\b{palabra}\b', case=False, na=False)
@@ -309,7 +390,7 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
         ]
 
     selected_text = pd.concat([filtered_data['COMENTARIO_POSITIVO'], filtered_data['COMENTARIO_NEGATIVO']])
-    nube_palabras = 'data:image/png;base64,{}'.format(generate_wordcloud(selected_text, 'coolwarm'))
+    nube_palabras = 'data:image/png;base64,{}'.format(generate_wordcloud(selected_text, 'bwr'))
 
     if active_tab == 'tab-linea-reservas':
         fig_lineas = go.Figure()
@@ -329,12 +410,15 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
         fig_barras = px.bar(tipo_hab_data, x='Tipo de Habitación', y='Cantidad', title='Comentarios por Tipo de Habitación')
         contenido_tab_comentarios = dcc.Graph(figure=fig_barras)
 
-    elif active_tab == 'tab-mapa-comentarios':
-        mapa_data = filtered_data[['PAIS', 'POS_COMENTARIOS', 'NEG_COMENTARIOS']].groupby('PAIS').sum().reset_index()
-        mapa_fig = px.scatter_geo(mapa_data, locations='PAIS', locationmode='country names', 
-                                  size='POS_COMENTARIOS' if 'positivo' in selected_comments else 'NEG_COMENTARIOS',
-                                  projection='natural earth', title='Distribución de Comentarios por País')
-        contenido_tab_comentarios = dcc.Graph(figure=mapa_fig)
+    elif active_tab == 'tab-barras-num-hab':
+        num_hab_data = filtered_data['No_HAB'].value_counts().reset_index()
+        num_hab_data.columns = ['Número de Habitación', 'Cantidad']
+        fig_barras_num = px.bar(num_hab_data, x='Número de Habitación', y='Cantidad', title='Comentarios por Número de Habitación')
+        contenido_tab_comentarios = dcc.Graph(figure=fig_barras_num)
+
+    elif active_tab == 'tab-mapa-comentarios-folium':
+        folium_map = generate_folium_map(filtered_data)
+        contenido_tab_comentarios = html.Iframe(srcDoc=folium_to_html(folium_map), style={"height": "70vh", "width": "100%"})
 
     return opciones_palabras, palabras_clave_seleccionadas, '', nube_palabras, contenido_tab_comentarios, tabla_data, tabla_columns
 
