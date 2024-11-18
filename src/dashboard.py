@@ -25,7 +25,7 @@ nltk.download('stopwords')
 
 # Carga de datos
 print("Cargando datos...")
-data = pd.read_excel(r"data_1.xlsx")
+data = pd.read_excel(r"../data/data_1.xlsx")
 data['FECHA'] = pd.to_datetime(data['FECHA'])
 
 # Asegurarse de que la columna 'CALIFICACION' sea de tipo numérico
@@ -422,5 +422,8 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
 
     return opciones_palabras, palabras_clave_seleccionadas, '', nube_palabras, contenido_tab_comentarios, tabla_data, tabla_columns
 
-if __name__ == '__main__':
-    app.run_server(debug=True)
+import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8050))
+    app.run_server(host="0.0.0.0", port=port)
