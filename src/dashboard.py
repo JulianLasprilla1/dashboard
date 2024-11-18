@@ -25,7 +25,12 @@ nltk.download('stopwords')
 
 # Carga de datos
 print("Cargando datos...")
-data = pd.read_excel(r"../data/data_1.xlsx")
+# Define la ruta absoluta al archivo
+base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+data_path = os.path.join(base_path, "data", "data_1.xlsx")
+
+# Carga el archivo de datos
+data = pd.read_excel(data_path)
 data['FECHA'] = pd.to_datetime(data['FECHA'])
 
 # Asegurarse de que la columna 'CALIFICACION' sea de tipo numérico
