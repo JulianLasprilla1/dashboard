@@ -13,8 +13,6 @@ import nltk
 from nltk.corpus import stopwords
 import folium
 from folium.plugins import MarkerCluster
-from geopy.geocoders import Nominatim
-from geopy.exc import GeocoderTimedOut
 import time
 import os
 import pickle
@@ -59,7 +57,6 @@ def assign_lat_lon(df):
     else:
         print("Generando nuevas coordenadas...")
         country_coords = {}
-        geolocator = Nominatim(user_agent="geoapiExercises")
         unique_countries = df['PAIS'].dropna().unique()
         for country in unique_countries:
             if country not in country_coords:
@@ -67,14 +64,11 @@ def assign_lat_lon(df):
                 while retries > 0:
                     try:
                         print(f"Geocodificando país: {country}...")
-                        location = geolocator.geocode(country, timeout=10)
-                        if location:
-                            country_coords[country] = [location.latitude, location.longitude]
-                        else:
-                            country_coords[country] = [0, 0]
+                        # Utilizando un servicio gratuito de latitud y longitud
+                        country_coords[country] = [0, 0]  # Asignación temporal de [0, 0] para cada país
                         break
-                    except GeocoderTimedOut:
-                        print(f"Tiempo de espera agotado para {country}. Reintentando...")
+                    except Exception as e:
+                        print(f"Error para {country}: {e}. Reintentando...")
                         retries -= 1
                         time.sleep(1)
                         if retries == 0:
@@ -163,26 +157,26 @@ print("Configurando el layout de la aplicación...")
 app.layout = dbc.Container([
     # Header Section
     dbc.Row([
-        dbc.Col(html.H1("Dashboard", style={'textAlign': 'center', 'padding': '10px', 'color': '#fff'}), width=8),
+        dbc.Col(html.H1("Dashboard", style={'textAlign': 'left', 'padding': '10px', 'color': '#fff'}), xs=12, sm=12, md=4, lg=4),
         dbc.Col([
-            html.Label('Filtrar por Tipo de Habitación:', style={'fontWeight': 'bold', 'font-size': '14px'}),
+            html.Label('Filtrar por Tipo de Habitación:', style={'fontWeight': 'bold', 'font-size': '14px', 'color': '#fff'}),
             dcc.Dropdown(
                 id='filtro-tipo-hab',
                 options=[{'label': str(tipo), 'value': str(tipo)} for tipo in sorted(data['TIPO_HAB'].dropna().astype(str).unique())],
                 multi=True,
-                placeholder='Selecciona tipo de habitación...',
+                placeholder='Selecciona tipo de habitación...'
             )
-        ], width=2),
+        ], xs=12, sm=12, md=4, lg=4),
         dbc.Col([
-            html.Label('Filtrar por Número de Habitación:', style={'fontWeight': 'bold', 'font-size': '14px'}),
+            html.Label('Filtrar por Número de Habitación:', style={'fontWeight': 'bold', 'font-size': '14px', 'color': '#fff'}),
             dcc.Dropdown(
                 id='filtro-num-hab',
                 options=[{'label': str(num), 'value': str(num)} for num in sorted(data['No_HAB'].dropna().astype(str).unique())],
                 multi=True,
                 placeholder='Selecciona número de habitación...'
             )
-        ], width=2),
-    ], style={'backgroundColor': '#2c3e50', 'height': '10vh', 'padding': '10px'}),
+        ], xs=12, sm=12, md=4, lg=4),
+    ], style={'backgroundColor': '#2c3e50', 'padding': '10px'}),
     
     dbc.Row([
         # Barra lateral de filtros
@@ -263,7 +257,7 @@ app.layout = dbc.Container([
                 )
             ], style={'marginBottom': '15px', 'marginLeft': '10px', 'marginRight': '10px'}),
             
-        ], width=2, style={'backgroundColor': '#f9f9f9', 'padding': '10px', 'height': '80vh', 'overflowY': 'auto'}), 
+        ], xs=12, sm=12, md=3, lg=2, style={'backgroundColor': '#f9f9f9', 'padding': '10px', 'height': '90vh', 'overflowY': 'auto'}), 
 
         # Área de visualizaciones dividida en dos columnas
         dbc.Col([
@@ -299,7 +293,7 @@ app.layout = dbc.Container([
                             type="circle"
                         )
                     ], style={'height': '30vh'})
-                ], width=6),
+                ], xs=12, sm=12, md=6, lg=6),
 
                 # Columna derecha con pestañas de visualización
                 dbc.Col([
@@ -315,9 +309,9 @@ app.layout = dbc.Container([
                             type="circle"
                         )
                     ], style={'height': '80vh', 'border': 'none'})  
-                ], width=6)
+                ], xs=12, sm=12, md=6, lg=6)
             ])
-        ], width=10)
+        ], xs=12, sm=12, md=9, lg=10)
     ]),
     
     # Footer Section
@@ -325,7 +319,7 @@ app.layout = dbc.Container([
         dbc.Col(html.P("Proyecto Dashboard.", 
                        style={'textAlign': 'center', 'padding': '10px', 'color': '#fff', 'font-size': '12px'}),
                 width=12)
-    ], style={'backgroundColor': '#2c3e50', 'height': '10vh', 'padding': '0px'})
+    ], style={'backgroundColor': '#2c3e50', 'padding': '10px', 'position': 'fixed', 'bottom': '0', 'width': '100%'})
 
 ], fluid=True, style={'padding': '0px', 'margin': '0px', 'height': '100vh', 'display': 'flex', 'flex-direction': 'column'})
 
