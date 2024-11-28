@@ -11,8 +11,6 @@ import base64
 from io import BytesIO
 import nltk
 from nltk.corpus import stopwords
-import folium
-from folium.plugins import MarkerCluster
 import time
 import os
 import pickle
@@ -45,47 +43,8 @@ data['TOTAL_COMENTARIOS'] = data['POS_COMENTARIOS'] + data['NEG_COMENTARIOS']
 print("Descargando stopwords en español...")
 stopwords_spanish = set(stopwords.words('spanish'))
 
-# Asignar latitud y longitud automáticamente desde el dataset con caché
-cache_file = "country_coords_cache.pkl"
-
-def assign_lat_lon(df):
-    print("Asignando latitudes y longitudes...")
-    if os.path.exists(cache_file):
-        print("Cargando datos de caché...")
-        with open(cache_file, 'rb') as f:
-            country_coords = pickle.load(f)
-    else:
-        print("Generando nuevas coordenadas...")
-        country_coords = {}
-        unique_countries = df['PAIS'].dropna().unique()
-        for country in unique_countries:
-            if country not in country_coords:
-                retries = 3
-                while retries > 0:
-                    try:
-                        print(f"Geocodificando país: {country}...")
-                        # Utilizando un servicio gratuito de latitud y longitud
-                        country_coords[country] = [0, 0]  # Asignación temporal de [0, 0] para cada país
-                        break
-                    except Exception as e:
-                        print(f"Error para {country}: {e}. Reintentando...")
-                        retries -= 1
-                        time.sleep(1)
-                        if retries == 0:
-                            print(f"No se pudo obtener la ubicación para {country}. Asignando [0, 0]...")
-                            country_coords[country] = [0, 0]
-        # Guardar en caché
-        with open(cache_file, 'wb') as f:
-            pickle.dump(country_coords, f)
-    
-    df['LATITUD'] = df['PAIS'].map(lambda x: country_coords.get(x, [0, 0])[0])
-    df['LONGITUD'] = df['PAIS'].map(lambda x: country_coords.get(x, [0, 0])[1])
-    return df
-
-data = assign_lat_lon(data)
-
 # Generar la nube de palabras sin iniciar la GUI de Matplotlib
-def generate_wordcloud(text, colormap='bwr'):
+def generate_wordcloud(text, colormap='Purples'):
     print("Generando nube de palabras...")
     valid_text = text.dropna().astype(str)
     if valid_text.empty:
@@ -96,10 +55,10 @@ def generate_wordcloud(text, colormap='bwr'):
         width=600,
         height=300,
         background_color='white',
-        colormap='bwr',
+        colormap='Purples',
         max_words=100,
         stopwords=stopwords_spanish,
-        contour_width=0.5,
+        contour_width=1.0,
         contour_color='black',
         scale=1.5,
         normalize_plurals=False
@@ -113,26 +72,6 @@ def generate_wordcloud(text, colormap='bwr'):
     plt.close()
     buffer.seek(0)
     return base64.b64encode(buffer.getvalue()).decode()
-
-# Generar un mapa de Folium
-def generate_folium_map(data):
-    print("Generando mapa de Folium...")
-    m = folium.Map(location=[4.7110, -74.0721], zoom_start=6)
-    marker_cluster = MarkerCluster().add_to(m)
-    for _, row in data.iterrows():
-        if row['LATITUD'] != 0 and row['LONGITUD'] != 0:
-            print(f"Agregando marcador para {row['PAIS']}...")
-            folium.Marker(
-                location=[row['LATITUD'], row['LONGITUD']],
-                popup=f"{row['PAIS']}: {row['POS_COMENTARIOS']} positivos, {row['NEG_COMENTARIOS']} negativos",
-                icon=folium.Icon(color='blue' if row['POS_COMENTARIOS'] >= row['NEG_COMENTARIOS'] else 'red')
-            ).add_to(marker_cluster)
-    return m
-
-# Convertir el mapa de Folium a HTML
-def folium_to_html(m):
-    print("Convirtiendo mapa de Folium a HTML...")
-    return m._repr_html_()
 
 #-------Inicialización de la aplicación Dash con Bootstrap-------#
 print("Inicializando la aplicación Dash...")
@@ -157,7 +96,7 @@ print("Configurando el layout de la aplicación...")
 app.layout = dbc.Container([
     # Header Section
     dbc.Row([
-        dbc.Col(html.H1("Dashboard", style={'textAlign': 'left', 'padding': '10px', 'color': '#fff'}), xs=12, sm=12, md=4, lg=4),
+        dbc.Col(html.H1("ANÁLISIS - RESEÑAS DE ALOJAMIENTO R10", style={'textAlign': 'left', 'padding': '10px', 'color': '#fff','fontSize': '28px'}), xs=12, sm=12, md=4, lg=4),
         dbc.Col([
             html.Label('Filtrar por Tipo de Habitación:', style={'fontWeight': 'bold', 'font-size': '14px', 'color': '#fff'}),
             dcc.Dropdown(
@@ -302,7 +241,8 @@ app.layout = dbc.Container([
                             dbc.Tab(label='Línea de Reservas', tab_id='tab-linea-reservas'),
                             dbc.Tab(label='Gráfico de Barras por Tipo de Habitación', tab_id='tab-barras-hab'),
                             dbc.Tab(label='Gráfico de Barras por Número de Habitación', tab_id='tab-barras-num-hab'),
-                            dbc.Tab(label='Mapa de Comentarios por País', tab_id='tab-mapa-comentarios-folium')
+                            dbc.Tab(label='Distribución de Calificaciones', tab_id='tab-calificaciones'),  # Nueva pestaña agregada
+                            dbc.Tab(label='Recuento de Comentarios por País', tab_id='tab-pais-comentarios')  # Nueva pestaña para países
                         ], id='tabs-comentarios', active_tab='tab-linea-reservas'),
                         dcc.Loading(
                             children=html.Div(id='contenido-tab-comentarios', style={'height': '75vh', 'padding': '10px'}),
@@ -314,9 +254,9 @@ app.layout = dbc.Container([
         ], xs=12, sm=12, md=9, lg=10)
     ]),
     
-    # Footer Section
+# Footer Section
     dbc.Row([ 
-        dbc.Col(html.P("Proyecto Dashboard.", 
+        dbc.Col(html.P("Proyecto Dashboard - Residencial 10", 
                        style={'textAlign': 'center', 'padding': '10px', 'color': '#fff', 'font-size': '12px'}),
                 width=12)
     ], style={'backgroundColor': '#2c3e50', 'padding': '10px', 'position': 'fixed', 'bottom': '0', 'width': '100%'})
@@ -389,18 +329,20 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
         ]
 
     selected_text = pd.concat([filtered_data['COMENTARIO_POSITIVO'], filtered_data['COMENTARIO_NEGATIVO']])
-    nube_palabras = 'data:image/png;base64,{}'.format(generate_wordcloud(selected_text, 'bwr'))
+    nube_palabras = 'data:image/png;base64,{}'.format(generate_wordcloud(selected_text, 'Purples'))
 
     if active_tab == 'tab-linea-reservas':
         fig_lineas = go.Figure()
         if 'positivo' in selected_comments:
-            reservas_positivas = filtered_data.groupby('FECHA')['POS_COMENTARIOS'].sum().resample(agg_type).sum()
+            reservas_positivas = filtered_data.set_index('FECHA').resample(agg_type)['POS_COMENTARIOS'].sum()
             fig_lineas.add_trace(go.Scatter(x=reservas_positivas.index, y=reservas_positivas, 
                                             mode='lines', name='Positivos', line=dict(color='green')))
         if 'negativo' in selected_comments:
-            reservas_negativas = filtered_data.groupby('FECHA')['NEG_COMENTARIOS'].sum().resample(agg_type).sum()
+            reservas_negativas = filtered_data.set_index('FECHA').resample(agg_type)['NEG_COMENTARIOS'].sum()
             fig_lineas.add_trace(go.Scatter(x=reservas_negativas.index, y=reservas_negativas, 
                                             mode='lines', name='Negativos', line=dict(color='red')))
+        fig_lineas.update_xaxes(tickangle=45, title='Fecha', showgrid=False)
+        fig_lineas.update_yaxes(showgrid=False)
         contenido_tab_comentarios = dcc.Graph(figure=fig_lineas)
 
     elif active_tab == 'tab-barras-hab':
@@ -415,9 +357,54 @@ def update_visualizations(palabra_clave, palabras_clave_seleccionadas, selected_
         fig_barras_num = px.bar(num_hab_data, x='Número de Habitación', y='Cantidad', title='Comentarios por Número de Habitación')
         contenido_tab_comentarios = dcc.Graph(figure=fig_barras_num)
 
-    elif active_tab == 'tab-mapa-comentarios-folium':
-        folium_map = generate_folium_map(filtered_data)
-        contenido_tab_comentarios = html.Iframe(srcDoc=folium_to_html(folium_map), style={"height": "70vh", "width": "100%"})
+    elif active_tab == 'tab-calificaciones':
+        calificaciones_data = filtered_data.copy()
+        calificaciones_data['Calificación Intervalo'] = pd.cut(calificaciones_data['CALIFICACION'], bins=[0, 2, 4, 6, 8, 10], labels=['1-2', '2-4', '4-6', '6-8', '8-10'])
+        calificaciones_grouped = calificaciones_data.groupby([pd.Grouper(key='FECHA', freq=agg_type), 'Calificación Intervalo']).size().reset_index(name='Cantidad')
+        calificaciones_grouped['Porcentaje'] = calificaciones_grouped.groupby('FECHA')['Cantidad'].transform(lambda x: 100 * x / x.sum())
+        fig_calificaciones = px.bar(
+            calificaciones_grouped,
+            x='FECHA',
+            y='Porcentaje',
+            color='Calificación Intervalo',
+            title='Distribución de Calificaciones a lo Largo del Tiempo',
+            labels={'Porcentaje': 'Porcentaje de Calificaciones'},
+            barmode='group'
+        )
+        fig_calificaciones.update_xaxes(
+            showticklabels=False,  # Eliminar etiquetas del eje X
+            tickangle=0,
+            title='Fecha',
+            showgrid=False,
+            tickformat='%b %Y' if agg_type in ['ME', 'Q'] else '%Y',
+            dtick='M1' if agg_type == 'ME' else ('M3' if agg_type == 'Q' else 'Y1'),
+            rangeslider_visible=False,
+            tickmode='linear'
+        )
+        fig_calificaciones.update_yaxes(title='Porcentaje de Calificaciones', showgrid=False)
+        fig_calificaciones.update_layout(
+            xaxis=dict(showline=True, linewidth=2, linecolor='black', mirror=True),
+            yaxis=dict(showline=True, linewidth=2, linecolor='black', mirror=True),
+            bargap=0.15  # Ajuste del espacio entre barras para mejorar la visualización
+        )
+        contenido_tab_comentarios = dcc.Graph(figure=fig_calificaciones)
+
+    elif active_tab == 'tab-pais-comentarios':
+        pais_data = filtered_data.groupby('PAIS').agg({'POS_COMENTARIOS': 'sum', 'NEG_COMENTARIOS': 'sum'}).reset_index()
+        pais_data.columns = ['País', 'Comentarios Positivos', 'Comentarios Negativos']
+        contenido_tab_comentarios = html.Div([
+            dash.dash_table.DataTable(
+                id='tabla-pais-comentarios',
+                columns=[
+                    {'name': 'País', 'id': 'País'},
+                    {'name': 'Comentarios Positivos', 'id': 'Comentarios Positivos'},
+                    {'name': 'Comentarios Negativos', 'id': 'Comentarios Negativos'}
+                ],
+                data=pais_data.to_dict('records'),
+                style_table={'height': '70vh', 'overflowY': 'auto'},
+                style_cell={'textAlign': 'left', 'whiteSpace': 'normal', 'fontSize': 12, 'height': 'auto'}
+            )
+        ])
 
     return opciones_palabras, palabras_clave_seleccionadas, '', nube_palabras, contenido_tab_comentarios, tabla_data, tabla_columns
 
